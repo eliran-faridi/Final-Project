@@ -1,0 +1,1369 @@
+/////////////////////////////
+//////  Modules Part   //////
+/////////////////////////////
+
+module ha ( in [0:0] a, in [0:0] b, out [0:0] sum, out [0:0] carry) 
+{
+    assign sum = a ^ b;
+    assign carry = a & b;
+}
+
+module approximate_ha ( in [0:0] a, in [0:0] b, out [0:0] sum, out [0:0] carry) 
+{
+    assign sum = a + b;
+    assign carry = a & b;
+}
+
+module fa ( in [0:0] a, in [0:0] b, in [0:0] c, out [0:0] sum, out [0:0] carry) 
+{
+    wire x = a ^ b;
+    wire y = a & b;
+    wire z = x & c;
+
+    assign sum = a ^ b ^ c;
+    assign carry = y | z;
+}
+
+module approximate_fa ( in [0:0] a, in [0:0] b, in [0:0] c, out [0:0] sum, out [0:0] carry) 
+{
+    assign sum = (a + b) ^ c;
+    assign carry = (a + b) * c;
+}
+
+module accurate_compressor_4_2 ( in [0:0] a, in [0:0] b, in [0:0] c, in [0:0] d, in [0:0] c_in, out [0:0] sum, out [0:0] carry, out [0:0] c_out) 
+{
+	wire i_sum;
+	
+    fa full_adder_1 (a, b, c, i_sum, c_out);
+    fa full_adder_2 (i_sum, d, c_in, sum, carry); 
+}
+
+module approximate_compressor ( in [0:0] a, in [0:0] b, in [0:0] c, in [0:0] d, out [0:0] sum, out [0:0] carry) 
+{
+    assign sum = ((a==1 && b==0 && c==1 && d==0) || (a==0 && b==1 && c==0 && d==1)) ? 1 : (a ^ b + c ^ d + a * b * c * d);
+    assign carry = (a == 1 && b == 1 && c == 1 && d == 1) ? 1 : (a * b + c * d);
+}
+
+module exact_multiplication ( in [7:0] A, in [7:0] B, out [15:0] output) 
+{
+    assign output = TIEmul(A,B,1'b1);
+}
+
+module exact_multiplication_16_x_16 ( in [15:0] A, in [15:0] B, out [31:0] output) 
+{
+    assign output = TIEmul(A,B,1'b1);
+}
+
+
+// approximate 8x8 bit multiplier
+module module_approximate_mult_8_x_8 ( in [7:0] A, in [7:0] B, out [15:0] output) 
+{
+	wire [7:0] a, b;
+	
+	assign a = (A[7]==1'b1) ? (~A+1) : (A);
+	assign b = (B[7]==1'b1) ? (~B+1) : (B);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    approximate_compressor ac2 (a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2);
+    approximate_ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    approximate_compressor ac3 (a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4);
+    approximate_compressor ac4 (a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5);
+    accurate_compressor_4_2 acc1 (1'b0, a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6, k1);
+    fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    accurate_compressor_4_2 acc2 (k1, a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8, k2);
+    ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (k2, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    approximate_compressor ac11 (c1, s2, s3, a[0:0]&b[6:6], s16, c16);
+    approximate_compressor ac12 (c2, c3 ,s4, s5, s17, c17);
+    wire compensate = ((a[5]&b[2])&(a[4]&b[3])) | ((a[1]&b[6])&(a[0]&b[7]));
+    accurate_compressor_4_2 acc4 (compensate, c4, c5, s6, s7, s18, c18, k4);
+    accurate_compressor_4_2 acc5 (k4, c6, c7, s8, s9, s19, c19, k5);
+    accurate_compressor_4_2 acc6 (k5, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    approximate_fa fa8 (c28, c15, s16, s29, c29);
+    approximate_fa fa9 (c29, c16, s17, s30, c30);
+    fa fa10 (c30, c17, s18, s31, c31);
+    fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+// Module Version 1
+module module_approximate_mult_8_x_8_v1 ( in [7:0] A, in [7:0] B, out [15:0] output) 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    approximate_compressor ac2 (a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2);
+    approximate_ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    approximate_compressor ac3 (a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4);
+    approximate_compressor ac4 (a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5);
+    accurate_compressor_4_2 acc1 (1'b0, a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6, k1);
+    fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    accurate_compressor_4_2 acc2 (k1, a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8, k2);
+    ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (k2, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    approximate_compressor ac11 (c1, s2, s3, a[0:0]&b[6:6], s16, c16);
+    approximate_compressor ac12 (c2, c3 ,s4, s5, s17, c17);
+    wire compensate = ((a[5]&b[2])&(a[4]&b[3])) | ((a[1]&b[6])&(a[0]&b[7]));
+    accurate_compressor_4_2 acc4 (compensate, c4, c5, s6, s7, s18, c18, k4);
+    accurate_compressor_4_2 acc5 (k4, c6, c7, s8, s9, s19, c19, k5);
+    accurate_compressor_4_2 acc6 (k5, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    approximate_fa fa8 (c28, c15, s16, s29, c29);
+    approximate_fa fa9 (c29, c16, s17, s30, c30);
+    fa fa10 (c30, c17, s18, s31, c31);
+    fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+// Module Version 2
+module module_approximate_mult_8_x_8_v2 ( in [7:0] A, in [7:0] B, out [15:0] output) 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    approximate_compressor ac2 (a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2);
+    approximate_ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    approximate_compressor ac3 (a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4);
+    approximate_compressor ac4 (a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5);
+    approximate_compressor acc1 (a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6);
+    approximate_fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    approximate_compressor acc2 (a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8);
+    approximate_ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (1'b0, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    approximate_compressor ac11 (c1, s2, s3, a[0:0]&b[6:6], s16, c16);
+    approximate_compressor ac12 (c2, c3 ,s4, s5, s17, c17);
+    approximate_compressor acc4 (c4, c5, s6, s7, s18, c18);
+    approximate_compressor acc5 (c6, c7, s8, s9, s19, c19);
+    
+    wire compensate = ((a[5]&b[4])&(a[4]&b[5])) | ((a[3]&b[6])&(a[2]&b[7]));
+    accurate_compressor_4_2 acc6 (compensate, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    approximate_fa fa8 (c28, c15, s16, s29, c29);
+    approximate_fa fa9 (c29, c16, s17, s30, c30);
+    approximate_fa fa10 (c30, c17, s18, s31, c31);
+    approximate_fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+// Module Version 3
+module module_approximate_mult_8_x_8_v3 ( in [7:0] A, in [7:0] B, out [15:0] output) 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8, z1, z2, z3, z4, h1, h2;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    
+    accurate_compressor_4_2 ac2 (1'b0, a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2, z1);
+    ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    accurate_compressor_4_2 ac3 (z1, a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4, z2);
+    accurate_compressor_4_2 ac4 (1'b0, a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5, z4);
+    accurate_compressor_4_2 acc1 (z2|z4, a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6, z3);
+    fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    accurate_compressor_4_2 acc2 (z3, a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8, k2);
+    ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (k2, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    
+    wire compensate = ((a[2]&b[3])|(a[0]&b[5]));
+    accurate_compressor_4_2 ac11 (compensate, c1, s2, s3, a[0:0]&b[6:6], s16, c16, h1);
+    accurate_compressor_4_2 ac12 (h1, c2, c3 ,s4, s5, s17, c17, h2);
+    accurate_compressor_4_2 acc4 (h2, c4, c5, s6, s7, s18, c18, k4);
+    accurate_compressor_4_2 acc5 (k4, c6, c7, s8, s9, s19, c19, k5);
+    accurate_compressor_4_2 acc6 (k5, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    fa fa8 (c28, c15, s16, s29, c29);
+    fa fa9 (c29, c16, s17, s30, c30);
+    fa fa10 (c30, c17, s18, s31, c31);
+    fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+
+// Module 16x16 Version 1
+module module_approximate_mult_16_x_16_v1( in [15:0] x_in, in [15:0] y_in, out [31:0] out_16_x_16_1 )
+{
+	wire [31:0] temp_output_1_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num1_up = (x_in[15:8]==one_vector) ? zero_vector : x_in[15:8]; 
+    wire [7:0] num1_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+     
+    
+    wire shift_by_1_num2_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num2_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num2_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v1 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v1 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v1 am_4(num1_down, num2_down,out4);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+}
+
+
+
+// Module 16x16 Version 2
+module module_approximate_mult_16_x_16_v2( in [15:0] x_in, in [15:0] y_in, out [31:0] out_16_x_16_1 )
+{
+	wire [31:0] temp_output_1_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num1_up = (x_in[15:8]==one_vector) ? zero_vector : x_in[15:8]; 
+    wire [7:0] num1_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+     
+    
+    wire shift_by_1_num2_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num2_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num2_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v2 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v2 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v2 am_4(num1_down, num2_down,out4);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+}
+
+
+
+// Module 16x16 Version 3
+module module_approximate_mult_16_x_16_v3( in [15:0] x_in, in [15:0] y_in, out [31:0] out_16_x_16_1 )
+{
+	wire [31:0] temp_output_1_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num1_up = (x_in[15:8]==one_vector) ? zero_vector : x_in[15:8]; 
+    wire [7:0] num1_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+     
+    
+    wire shift_by_1_num2_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num2_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num2_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v3 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v3 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v3 am_4(num1_down, num2_down,out4);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+}
+
+
+
+//////////////////////////////////////////////////////////////
+//															//
+//		      Approximate 8x8 bit multiplier	  	        //
+//															//
+//////////////////////////////////////////////////////////////
+
+// Version 1
+operation approximate_mult_8_x_8_v1 { out AR output, in AR A, in AR B } {} 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    approximate_compressor ac2 (a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2);
+    approximate_ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    approximate_compressor ac3 (a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4);
+    approximate_compressor ac4 (a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5);
+    accurate_compressor_4_2 acc1 (1'b0, a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6, k1);
+    fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    accurate_compressor_4_2 acc2 (k1, a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8, k2);
+    ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (k2, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    approximate_compressor ac11 (c1, s2, s3, a[0:0]&b[6:6], s16, c16);
+    approximate_compressor ac12 (c2, c3 ,s4, s5, s17, c17);
+    wire compensate = ((a[5]&b[2])&(a[4]&b[3])) | ((a[1]&b[6])&(a[0]&b[7]));
+    accurate_compressor_4_2 acc4 (compensate, c4, c5, s6, s7, s18, c18, k4);
+    accurate_compressor_4_2 acc5 (k4, c6, c7, s8, s9, s19, c19, k5);
+    accurate_compressor_4_2 acc6 (k5, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    approximate_fa fa8 (c28, c15, s16, s29, c29);
+    approximate_fa fa9 (c29, c16, s17, s30, c30);
+    fa fa10 (c30, c17, s18, s31, c31);
+    fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+// Version 2
+operation approximate_mult_8_x_8_v2 { out AR output, in AR A, in AR B } {} 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    approximate_compressor ac2 (a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2);
+    approximate_ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    approximate_compressor ac3 (a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4);
+    approximate_compressor ac4 (a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5);
+    approximate_compressor acc1 (a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6);
+    approximate_fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    approximate_compressor acc2 (a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8);
+    approximate_ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (1'b0, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    approximate_compressor ac11 (c1, s2, s3, a[0:0]&b[6:6], s16, c16);
+    approximate_compressor ac12 (c2, c3 ,s4, s5, s17, c17);
+    approximate_compressor acc4 (c4, c5, s6, s7, s18, c18);
+    approximate_compressor acc5 (c6, c7, s8, s9, s19, c19);
+    wire compensate = ((a[5]&b[4])&(a[4]&b[5])) | ((a[3]&b[6])&(a[2]&b[7]));
+    accurate_compressor_4_2 acc6 (compensate, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    approximate_fa fa8 (c28, c15, s16, s29, c29);
+    approximate_fa fa9 (c29, c16, s17, s30, c30);
+    approximate_fa fa10 (c30, c17, s18, s31, c31);
+    approximate_fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+// Version 3
+operation approximate_mult_8_x_8_v3 { out AR output, in AR A, in AR B } {} 
+{
+	wire [7:0] a_temp = A[7:0];
+    wire [7:0] b_temp = B[7:0];
+
+	wire [7:0] a, b;
+	
+	assign a = (a_temp[7]==1'b1) ? (~a_temp+1) : (a_temp);
+	assign b = (b_temp[7]==1'b1) ? (~b_temp+1) : (b_temp);
+		 
+	wire s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    wire c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11;
+    wire k1, k2, k3, k4, k5, k6, k7, k8, z1, z2, z3, z4, h1, h2;
+
+    
+    /////////////////////////
+    //////   stage 1   //////
+    /////////////////////////    
+    
+    approximate_ha ha1 (a[4:4]&b[0:0], a[3:3]&b[1:1], s0, c0);
+    approximate_compressor ac1 (a[5:5]&b[0:0], a[4:4]&b[1:1], a[3:3]&b[2:2], a[2:2]&b[3:3], s1, c1);
+    accurate_compressor_4_2 ac2 (1'b0, a[6:6]&b[0:0], a[5:5]&b[1:1], a[4:4]&b[2:2], a[3:3]&b[3:3], s2, c2, z1);
+    ha ha2 (a[2:2]&b[4:4], a[1:1]&b[5:5], s3, c3);
+    accurate_compressor_4_2 ac3 (z1, a[7:7]&b[0:0], a[6:6]&b[1:1], a[5:5]&b[2:2], a[4:4]&b[3:3], s4, c4, z2);
+    accurate_compressor_4_2 ac4 (1'b0, a[3:3]&b[4:4], a[2:2]&b[5:5], a[1:1]&b[6:6], a[0:0]&b[7:7], s5, c5, z4);
+    
+    accurate_compressor_4_2 acc1 (z2, a[7:7]&b[1:1], a[6:6]&b[2:2], a[5:5]&b[3:3], a[4:4]&b[4:4], s6, c6, z3);
+    fa fa1 (a[3:3]&b[5:5], a[2:2]&b[6:6], a[1:1]&b[7:7], s7, c7);
+    accurate_compressor_4_2 acc2 (z3, a[7:7]&b[2:2], a[6:6]&b[3:3], a[5:5]&b[4:4], a[4:4]&b[5:5], s8, c8, k2);
+    ha ha3 (a[3:3]&b[6:6], a[2:2]&b[7:7], s9, c9);
+    accurate_compressor_4_2 acc3 (k2, a[7:7]&b[3:3], a[6:6]&b[4:4], a[5:5]&b[5:5], a[4:4]&b[6:6], s10, c10, k3);
+    fa fa2 (k3, a[7:7]&b[4:4], a[6:6]&b[5:5], s11, c11);
+    
+    
+    /////////////////////////
+    //////   stage 2   //////
+    /////////////////////////
+    
+    wire s12, s13, s14, s15, s16, s17, s18, s19, s20, s21;
+    wire c12, c13, c14, c15, c16, c17, c18, c19, c20, c21;
+    
+    approximate_ha ha5 (a[2]&b[0], a[1]&b[1], s12, c12);
+    approximate_compressor ac8 (a[3]&b[0], a[2:2]&b[1:1], a[1:1]&b[2:2], a[0:0]&b[3:3], s13, c13);
+    approximate_compressor ac9 (s0, a[2:2]&b[2:2], a[1:1]&b[3:3], a[0:0]&b[4:4], s14, c14);
+    approximate_compressor ac10 (c0, s1, a[1:1]&b[4:4], a[0:0]&b[5:5], s15, c15);
+    
+    wire compensate = ((a[2]&b[3])&(a[0]&b[5]));
+    accurate_compressor_4_2 ac11 (compensate, c1, s2, s3, a[0:0]&b[6:6], s16, c16, h1);
+    accurate_compressor_4_2 ac12 (h1, c2, c3 ,s4, s5, s17, c17, h2);
+    accurate_compressor_4_2 acc4 (h2, c4, c5, s6, s7, s18, c18, k4);
+    accurate_compressor_4_2 acc5 (k4, c6, c7, s8, s9, s19, c19, k5);
+    accurate_compressor_4_2 acc6 (k5, c8, c9, s10, a[3:3]&b[7:7], s20, c20, k6);
+    accurate_compressor_4_2 acc7 (k6, c10, s11, a[5:5]&b[6:6], a[4:4]&b[7:7], s21, c21, k7);
+    accurate_compressor_4_2 acc8 (k7, c11, a[7:7]&b[5:5], a[6:6]&b[6:6], a[5:5]&b[7:7], s22, c22, k8);
+    fa fa3 (k8, a[7:7]&b[6:6], a[6:6]&b[7:7], s23, c23);
+    
+    
+    /////////////////////////
+    //////   stage 3   //////
+    /////////////////////////
+    
+    wire s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37;
+    wire c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37;
+    
+    approximate_ha ha7 (a[1]&b[0], a[0]&b[1], s24, c24);
+    approximate_fa fa4 (c24, s12, a[0]&b[2], s25, c25);
+    approximate_fa fa5 (c25, c12, s13, s26, c26);
+    approximate_fa fa6 (c26, c13, s14, s27, c27);
+    approximate_fa fa7 (c27, c14, s15, s28, c28);
+    fa fa8 (c28, c15, s16, s29, c29);
+    fa fa9 (c29, c16, s17, s30, c30);
+    fa fa10 (c30, c17, s18, s31, c31);
+    fa fa11 (c31, c18, s19, s32, c32);
+    fa fa12 (c32, c19, s20, s33, c33);
+    fa fa13 (c33, c20, s21, s34, c34);
+    fa fa14 (c34, c21, s22, s35, c35);
+    fa fa15 (c35, c22, s23, s36, c36);
+    fa fa16 (c36, c23, a[7]&b[7], s37, c37);  
+           
+    
+    /////////////////////////
+    //////    output   //////
+    /////////////////////////
+   
+    wire [15:0] temp = {a[0]&b[0], s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, c37 };
+    wire [15:0] temp_out;
+    assign temp_out = {temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8], temp[9], temp[10], temp[11], temp[12], temp[13], temp[14], temp[15]};
+    assign output = (A[7]^B[7]) ? (~temp_out+1) : temp_out;
+}
+
+
+//////////////////////////////////////////////////////////////
+//															//
+//		      Approximate 16x16 bit multiplier	  	        //
+//															//
+//////////////////////////////////////////////////////////////
+
+// Version 1
+operation approximate_mult_16_x_16_v1{ out AR out_16_x_16_1, out AR out_16_x_16_2, in AR x_in, in AR y_in } {}
+{
+	wire [31:0] temp_output_1_new;
+	wire [31:0] temp_output_2_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[31:24] == one_vector) && (x_in[23] == 1'b0)) || ((x_in[31:24] == zero_vector) && (x_in[23] == 1'b1));
+    wire [7:0] num1_up = (x_in[31:24]==one_vector) ? zero_vector : x_in[31:24]; 
+    wire [7:0] num1_down = (x_in[31:24] == one_vector) ? ((x_in[23] == 1'b0) ? x_in[24:17] : x_in[23:16]) : 
+    				       (x_in[31:24] == zero_vector) ? ((x_in[23] == 1'b1) ? x_in[24:17] : x_in[23:16]) :
+    				       x_in[23:16];
+     
+    
+    wire shift_by_1_num2_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num2_up = (x_in[15:8]==one_vector) ? (x_in[15:8]==zero_vector) : x_in[15:8];
+    wire [7:0] num2_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+    
+
+    // SECOND NUMBER
+    wire shift_by_1_num3_down = ((y_in[31:24] == one_vector) && (y_in[23] == 1'b0)) || ((y_in[31:24] == zero_vector) && (y_in[23] == 1'b1));
+    wire [7:0] num3_up = (y_in[31:24]==one_vector) ? (y_in[31:24]==zero_vector) : y_in[31:24];  
+    wire [7:0] num3_down = (y_in[31:24] == one_vector) ? ((y_in[23] == 1'b0) ? y_in[24:17] : y_in[23:16]) : 
+    				       (y_in[31:24] == zero_vector) ? ((y_in[23] == 1'b1) ? y_in[24:17] : y_in[23:16]) :
+    				       y_in[23:16];
+    
+    
+    wire shift_by_1_num4_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num4_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num4_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    wire [15:0] out5, out6, out7, out8;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v1 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v1 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v1 am_4(num1_down, num2_down,out4);
+    
+    exact_multiplication am_5(num3_up, num4_up, out5);
+    module_approximate_mult_8_x_8_v1 am_6(num3_up, num4_down, out6);
+    module_approximate_mult_8_x_8_v1 am_7(num3_down, num4_up, out7);
+    module_approximate_mult_8_x_8_v1 am_8(num3_down, num4_down,out8);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+	// SECOND RESULT
+	wire [31:0] t5 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out5[0],out5[1],out5[2],out5[3],out5[4],out5[5],out5[6],out5[7],out5[8],out5[9],out5[10],out5[11],out5[12],out5[13],out5[14],out5[15]};
+	wire [31:0] TEMP_out5 = {t5[0], t5[1], t5[2], t5[3], t5[4], t5[5], t5[6], t5[7], t5[8], t5[9], t5[10], t5[11], t5[12], t5[13], t5[14], t5[15], t5[16], t5[17], t5[18], t5[19], t5[20], t5[21], t5[22], t5[23], t5[24], t5[25], t5[26], t5[27], t5[28], t5[29], t5[30], t5[31]};
+			
+	wire [15:0] t6 = {out6[0],out6[1],out6[2],out6[3],out6[4],out6[5],out6[6],out6[7],out6[8],out6[9],out6[10],out6[11],out6[12],out6[13],out6[14],out6[15]};
+	wire out6_sign = (out6[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out6_8shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out6_9shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out6 = (shift_by_1_num4_down==1'b1) ? TEMP_out6_9shift : TEMP_out6_8shift;
+	
+	wire [15:0] t7 = {out7[0],out7[1],out7[2],out7[3],out7[4],out7[5],out7[6],out7[7],out7[8],out7[9],out7[10],out7[11],out7[12],out7[13],out7[14],out7[15]};
+	wire out7_sign = (out7[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out7_8shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out7_9shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out7 = (shift_by_1_num3_down==1'b1) ? TEMP_out7_9shift : TEMP_out7_8shift;	
+		
+	wire [15:0] t8 = {out8[0],out8[1],out8[2],out8[3],out8[4],out8[5],out8[6],out8[7],out8[8],out8[9],out8[10],out8[11],out8[12],out8[13],out8[14],out8[15]};
+	wire out8_sign = (out8[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out8_0shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15]};
+	wire [31:0] TEMP_out8_1shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0};
+	wire [31:0] TEMP_out8_2shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out8 = (shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b1) ? TEMP_out8_2shift :
+							((shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b0) || (shift_by_1_num3_down==1'b0 && shift_by_1_num4_down==1'b1)) ? TEMP_out8_1shift :
+							TEMP_out8_0shift;							
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+    assign temp_output_2_new = TEMP_out5 + TEMP_out6 + TEMP_out7 + TEMP_out8;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+    assign out_16_x_16_2 = temp_output_2_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+    TIEprint("temp_output_2_new: %d \n", temp_output_2_new);
+}
+
+
+// Version 2
+operation approximate_mult_16_x_16_v2{ out AR out_16_x_16_1, out AR out_16_x_16_2, in AR x_in, in AR y_in } {}
+{
+	wire [31:0] temp_output_1_new;
+	wire [31:0] temp_output_2_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[31:24] == one_vector) && (x_in[23] == 1'b0)) || ((x_in[31:24] == zero_vector) && (x_in[23] == 1'b1));
+    wire [7:0] num1_up = (x_in[31:24]==one_vector) ? zero_vector : x_in[31:24]; 
+    wire [7:0] num1_down = (x_in[31:24] == one_vector) ? ((x_in[23] == 1'b0) ? x_in[24:17] : x_in[23:16]) : 
+    				       (x_in[31:24] == zero_vector) ? ((x_in[23] == 1'b1) ? x_in[24:17] : x_in[23:16]) :
+    				       x_in[23:16];
+     
+    
+    wire shift_by_1_num2_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num2_up = (x_in[15:8]==one_vector) ? (x_in[15:8]==zero_vector) : x_in[15:8];
+    wire [7:0] num2_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+    
+
+    // SECOND NUMBER
+    wire shift_by_1_num3_down = ((y_in[31:24] == one_vector) && (y_in[23] == 1'b0)) || ((y_in[31:24] == zero_vector) && (y_in[23] == 1'b1));
+    wire [7:0] num3_up = (y_in[31:24]==one_vector) ? (y_in[31:24]==zero_vector) : y_in[31:24];  
+    wire [7:0] num3_down = (y_in[31:24] == one_vector) ? ((y_in[23] == 1'b0) ? y_in[24:17] : y_in[23:16]) : 
+    				       (y_in[31:24] == zero_vector) ? ((y_in[23] == 1'b1) ? y_in[24:17] : y_in[23:16]) :
+    				       y_in[23:16];
+    
+    
+    wire shift_by_1_num4_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num4_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num4_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    wire [15:0] out5, out6, out7, out8;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v2 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v2 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v2 am_4(num1_down, num2_down,out4);
+    
+    exact_multiplication am_5(num3_up, num4_up, out5);
+    module_approximate_mult_8_x_8_v2 am_6(num3_up, num4_down, out6);
+    module_approximate_mult_8_x_8_v2 am_7(num3_down, num4_up, out7);
+    module_approximate_mult_8_x_8_v2 am_8(num3_down, num4_down,out8);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+	// SECOND RESULT
+	wire [31:0] t5 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out5[0],out5[1],out5[2],out5[3],out5[4],out5[5],out5[6],out5[7],out5[8],out5[9],out5[10],out5[11],out5[12],out5[13],out5[14],out5[15]};
+	wire [31:0] TEMP_out5 = {t5[0], t5[1], t5[2], t5[3], t5[4], t5[5], t5[6], t5[7], t5[8], t5[9], t5[10], t5[11], t5[12], t5[13], t5[14], t5[15], t5[16], t5[17], t5[18], t5[19], t5[20], t5[21], t5[22], t5[23], t5[24], t5[25], t5[26], t5[27], t5[28], t5[29], t5[30], t5[31]};
+			
+	wire [15:0] t6 = {out6[0],out6[1],out6[2],out6[3],out6[4],out6[5],out6[6],out6[7],out6[8],out6[9],out6[10],out6[11],out6[12],out6[13],out6[14],out6[15]};
+	wire out6_sign = (out6[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out6_8shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out6_9shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out6 = (shift_by_1_num4_down==1'b1) ? TEMP_out6_9shift : TEMP_out6_8shift;
+	
+	wire [15:0] t7 = {out7[0],out7[1],out7[2],out7[3],out7[4],out7[5],out7[6],out7[7],out7[8],out7[9],out7[10],out7[11],out7[12],out7[13],out7[14],out7[15]};
+	wire out7_sign = (out7[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out7_8shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out7_9shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out7 = (shift_by_1_num3_down==1'b1) ? TEMP_out7_9shift : TEMP_out7_8shift;	
+		
+	wire [15:0] t8 = {out8[0],out8[1],out8[2],out8[3],out8[4],out8[5],out8[6],out8[7],out8[8],out8[9],out8[10],out8[11],out8[12],out8[13],out8[14],out8[15]};
+	wire out8_sign = (out8[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out8_0shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15]};
+	wire [31:0] TEMP_out8_1shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0};
+	wire [31:0] TEMP_out8_2shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out8 = (shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b1) ? TEMP_out8_2shift :
+							((shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b0) || (shift_by_1_num3_down==1'b0 && shift_by_1_num4_down==1'b1)) ? TEMP_out8_1shift :
+							TEMP_out8_0shift;							
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+    assign temp_output_2_new = TEMP_out5 + TEMP_out6 + TEMP_out7 + TEMP_out8;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+    assign out_16_x_16_2 = temp_output_2_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+    TIEprint("temp_output_2_new: %d \n", temp_output_2_new);
+}
+
+
+// Version 3
+operation approximate_mult_16_x_16_v3{ out AR out_16_x_16_1, out AR out_16_x_16_2, in AR x_in, in AR y_in } {}
+{
+	wire [31:0] temp_output_1_new;
+	wire [31:0] temp_output_2_new;
+	   
+    wire [7:0] zero_vector = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+    wire [7:0] one_vector = {1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1,1'b1};
+    
+    // FIRST NUMBER
+    wire shift_by_1_num1_down = ((x_in[31:24] == one_vector) && (x_in[23] == 1'b0)) || ((x_in[31:24] == zero_vector) && (x_in[23] == 1'b1));
+    wire [7:0] num1_up = (x_in[31:24]==one_vector) ? zero_vector : x_in[31:24]; 
+    wire [7:0] num1_down = (x_in[31:24] == one_vector) ? ((x_in[23] == 1'b0) ? x_in[24:17] : x_in[23:16]) : 
+    				       (x_in[31:24] == zero_vector) ? ((x_in[23] == 1'b1) ? x_in[24:17] : x_in[23:16]) :
+    				       x_in[23:16];
+     
+    
+    wire shift_by_1_num2_down = ((x_in[15:8] == one_vector) && (x_in[7] == 1'b0)) || ((x_in[15:8] == zero_vector) && (x_in[7] == 1'b1));
+    wire [7:0] num2_up = (x_in[15:8]==one_vector) ? (x_in[15:8]==zero_vector) : x_in[15:8];
+    wire [7:0] num2_down = (x_in[15:8] == one_vector) ? ((x_in[7] == 1'b0) ? x_in[8:1] : x_in[7:0]) : 
+    				       (x_in[15:8] == zero_vector) ? ((x_in[7] == 1'b1) ? x_in[8:1] : x_in[7:0]) :
+    				       x_in[7:0];
+    
+
+    // SECOND NUMBER
+    wire shift_by_1_num3_down = ((y_in[31:24] == one_vector) && (y_in[23] == 1'b0)) || ((y_in[31:24] == zero_vector) && (y_in[23] == 1'b1));
+    wire [7:0] num3_up = (y_in[31:24]==one_vector) ? (y_in[31:24]==zero_vector) : y_in[31:24];  
+    wire [7:0] num3_down = (y_in[31:24] == one_vector) ? ((y_in[23] == 1'b0) ? y_in[24:17] : y_in[23:16]) : 
+    				       (y_in[31:24] == zero_vector) ? ((y_in[23] == 1'b1) ? y_in[24:17] : y_in[23:16]) :
+    				       y_in[23:16];
+    
+    
+    wire shift_by_1_num4_down = ((y_in[15:8] == one_vector) && (y_in[7] == 1'b0)) || ((y_in[15:8] == zero_vector) && (y_in[7] == 1'b1));
+    wire [7:0] num4_up = (y_in[15:8]==one_vector) ? (y_in[15:8]==zero_vector) : y_in[15:8];
+    wire [7:0] num4_down = (y_in[15:8] == one_vector) ? ((y_in[7] == 1'b0) ? y_in[8:1] : y_in[7:0]) : 
+    				       (y_in[15:8] == zero_vector) ? ((y_in[7] == 1'b1) ? y_in[8:1] : y_in[7:0]) :
+    				       y_in[7:0];
+    
+    
+    
+	// Implementation of 16x16 bit Multiplication Using Four 8x8 bit Elements
+    wire [15:0] out1, out2, out3, out4;
+    wire [15:0] out5, out6, out7, out8;
+    
+    exact_multiplication am_1(num1_up, num2_up, out1);
+    module_approximate_mult_8_x_8_v3 am_2(num1_up, num2_down, out2);
+    module_approximate_mult_8_x_8_v3 am_3(num1_down, num2_up, out3);
+    module_approximate_mult_8_x_8_v3 am_4(num1_down, num2_down,out4);
+    
+    exact_multiplication am_5(num3_up, num4_up, out5);
+    module_approximate_mult_8_x_8_v3 am_6(num3_up, num4_down, out6);
+    module_approximate_mult_8_x_8_v3 am_7(num3_down, num4_up, out7);
+    module_approximate_mult_8_x_8_v3 am_8(num3_down, num4_down,out8);
+    
+    
+    // FIRST RESULT
+	wire [31:0] t1 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out1[0],out1[1],out1[2],out1[3],out1[4],out1[5],out1[6],out1[7],out1[8],out1[9],out1[10],out1[11],out1[12],out1[13],out1[14],out1[15]};
+	wire [31:0] TEMP_out1 = {t1[0], t1[1], t1[2], t1[3], t1[4], t1[5], t1[6], t1[7], t1[8], t1[9], t1[10], t1[11], t1[12], t1[13], t1[14], t1[15], t1[16], t1[17], t1[18], t1[19], t1[20], t1[21], t1[22], t1[23], t1[24], t1[25], t1[26], t1[27], t1[28], t1[29], t1[30], t1[31]};
+	
+	wire [15:0] t2 = {out2[0],out2[1],out2[2],out2[3],out2[4],out2[5],out2[6],out2[7],out2[8],out2[9],out2[10],out2[11],out2[12],out2[13],out2[14],out2[15]};
+	wire out2_sign = (out2[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out2_8shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2_9shift = {out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign,out2_sign, t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], t2[6], t2[7], t2[8], t2[9], t2[10], t2[11], t2[12], t2[13], t2[14], t2[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out2 = (shift_by_1_num2_down==1'b1) ? TEMP_out2_9shift : TEMP_out2_8shift;
+			
+	wire [15:0] t3 = {out3[0],out3[1],out3[2],out3[3],out3[4],out3[5],out3[6],out3[7],out3[8],out3[9],out3[10],out3[11],out3[12],out3[13],out3[14],out3[15]};
+	wire out3_sign = (out3[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out3_8shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3_9shift = {out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign,out3_sign, t3[0], t3[1], t3[2], t3[3], t3[4], t3[5], t3[6], t3[7], t3[8], t3[9], t3[10], t3[11], t3[12], t3[13], t3[14], t3[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out3 = (shift_by_1_num1_down==1'b1) ? TEMP_out3_9shift : TEMP_out3_8shift;
+
+	wire [15:0] t4 = {out4[0],out4[1],out4[2],out4[3],out4[4],out4[5],out4[6],out4[7],out4[8],out4[9],out4[10],out4[11],out4[12],out4[13],out4[14],out4[15]};
+	wire out4_sign = (out4[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out4_0shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15]};
+	wire [31:0] TEMP_out4_1shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0};
+	wire [31:0] TEMP_out4_2shift = {out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign,out4_sign, t4[0], t4[1], t4[2], t4[3], t4[4], t4[5], t4[6], t4[7], t4[8], t4[9], t4[10], t4[11], t4[12], t4[13], t4[14], t4[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out4 = (shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b1) ? TEMP_out4_2shift :
+							((shift_by_1_num1_down==1'b1 && shift_by_1_num2_down==1'b0) || (shift_by_1_num1_down==1'b0 && shift_by_1_num2_down==1'b1)) ? TEMP_out4_1shift :
+							TEMP_out4_0shift;							
+	
+	
+	
+	// SECOND RESULT
+	wire [31:0] t5 = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,out5[0],out5[1],out5[2],out5[3],out5[4],out5[5],out5[6],out5[7],out5[8],out5[9],out5[10],out5[11],out5[12],out5[13],out5[14],out5[15]};
+	wire [31:0] TEMP_out5 = {t5[0], t5[1], t5[2], t5[3], t5[4], t5[5], t5[6], t5[7], t5[8], t5[9], t5[10], t5[11], t5[12], t5[13], t5[14], t5[15], t5[16], t5[17], t5[18], t5[19], t5[20], t5[21], t5[22], t5[23], t5[24], t5[25], t5[26], t5[27], t5[28], t5[29], t5[30], t5[31]};
+			
+	wire [15:0] t6 = {out6[0],out6[1],out6[2],out6[3],out6[4],out6[5],out6[6],out6[7],out6[8],out6[9],out6[10],out6[11],out6[12],out6[13],out6[14],out6[15]};
+	wire out6_sign = (out6[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out6_8shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out6_9shift = {out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign,out6_sign, t6[0], t6[1], t6[2], t6[3], t6[4], t6[5], t6[6], t6[7], t6[8], t6[9], t6[10], t6[11], t6[12], t6[13], t6[14], t6[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out6 = (shift_by_1_num4_down==1'b1) ? TEMP_out6_9shift : TEMP_out6_8shift;
+	
+	wire [15:0] t7 = {out7[0],out7[1],out7[2],out7[3],out7[4],out7[5],out7[6],out7[7],out7[8],out7[9],out7[10],out7[11],out7[12],out7[13],out7[14],out7[15]};
+	wire out7_sign = (out7[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out7_8shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};
+	wire [31:0] TEMP_out7_9shift = {out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign,out7_sign, t7[0], t7[1], t7[2], t7[3], t7[4], t7[5], t7[6], t7[7], t7[8], t7[9], t7[10], t7[11], t7[12], t7[13], t7[14], t7[15],1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,1'b0};	
+	wire [31:0] TEMP_out7 = (shift_by_1_num3_down==1'b1) ? TEMP_out7_9shift : TEMP_out7_8shift;	
+		
+	wire [15:0] t8 = {out8[0],out8[1],out8[2],out8[3],out8[4],out8[5],out8[6],out8[7],out8[8],out8[9],out8[10],out8[11],out8[12],out8[13],out8[14],out8[15]};
+	wire out8_sign = (out8[15]==1'b1) ? 1'b1 : 1'b0;
+	wire [31:0] TEMP_out8_0shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15]};
+	wire [31:0] TEMP_out8_1shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0};
+	wire [31:0] TEMP_out8_2shift = {out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign,out8_sign, t8[0], t8[1], t8[2], t8[3], t8[4], t8[5], t8[6], t8[7], t8[8], t8[9], t8[10], t8[11], t8[12], t8[13], t8[14], t8[15], 1'b0,1'b0};
+	wire [31:0] TEMP_out8 = (shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b1) ? TEMP_out8_2shift :
+							((shift_by_1_num3_down==1'b1 && shift_by_1_num4_down==1'b0) || (shift_by_1_num3_down==1'b0 && shift_by_1_num4_down==1'b1)) ? TEMP_out8_1shift :
+							TEMP_out8_0shift;							
+	
+	
+    assign temp_output_1_new = TEMP_out1 + TEMP_out2 + TEMP_out3 + TEMP_out4;
+    assign temp_output_2_new = TEMP_out5 + TEMP_out6 + TEMP_out7 + TEMP_out8;
+
+    assign out_16_x_16_1 = temp_output_1_new;
+    assign out_16_x_16_2 = temp_output_2_new;
+
+    TIEprint("temp_output_1_new: %d \n", temp_output_1_new);
+    TIEprint("temp_output_2_new: %d \n", temp_output_2_new);
+}
+
+
+//////////////////////////////////////////////////////////////
+//															//
+//		      Approximate 32x32 bit multiplier	  	        //
+//															//
+//////////////////////////////////////////////////////////////
+
+
+// Version 1
+operation approximate_mult_32_x_32_v1{ out AR output_up, out AR output_down, in AR A, in AR B } {}
+{
+    wire [63:0] temp_output_1;
+       
+    wire [15:0] A_up = A[31:16];
+    wire [15:0] A_down = A[15:0];
+    
+    wire [15:0] B_up = B[31:16];
+    wire [15:0] B_down = B[15:0];
+    
+    TIEprint("A_up: %d , A_down: %d , B_up: %d , B_down: %d \n", A_up, A_down, B_up, B_down);
+      
+    wire [31:0] out1, out2, out3, out4;
+    
+    exact_multiplication_16_x_16 am_1(A_up, B_up, out1);
+    module_approximate_mult_16_x_16_v1 am_2(A_up, B_down, out2);
+    module_approximate_mult_16_x_16_v1 am_3(A_down, B_up, out3);
+    module_approximate_mult_16_x_16_v1 am_4(A_down, B_down,out4);
+    
+    
+    TIEprint("out1: %d \n",out1);
+    TIEprint("out2: %d \n",out2);
+    TIEprint("out3: %d \n",out3);
+    TIEprint("out8: %d \n******************* \n",out4);
+      
+    assign temp_output_1 = (out1<<32) + (out2<<16) + (out3<<16) + out4;
+        
+    assign output_up = temp_output_1[63:32];
+    assign output_down = temp_output_1[31:0];
+}
+
+
+// Version 2
+operation approximate_mult_32_x_32_v2{ out AR output_up, out AR output_down, in AR A, in AR B } {}
+{
+    wire [63:0] temp_output_1;
+       
+    wire [15:0] A_up = A[31:16];
+    wire [15:0] A_down = A[15:0];
+    
+    wire [15:0] B_up = B[31:16];
+    wire [15:0] B_down = B[15:0];
+    
+    TIEprint("A_up: %d , A_down: %d , B_up: %d , B_down: %d \n", A_up, A_down, B_up, B_down);
+      
+    wire [31:0] out1, out2, out3, out4;
+    
+    exact_multiplication_16_x_16 am_1(A_up, B_up, out1);
+    module_approximate_mult_16_x_16_v2 am_2(A_up, B_down, out2);
+    module_approximate_mult_16_x_16_v2 am_3(A_down, B_up, out3);
+    module_approximate_mult_16_x_16_v2 am_4(A_down, B_down,out4);
+    
+    
+    TIEprint("out1: %d \n",out1);
+    TIEprint("out2: %d \n",out2);
+    TIEprint("out3: %d \n",out3);
+    TIEprint("out8: %d \n******************* \n",out4);
+      
+    assign temp_output_1 = (out1<<32) + (out2<<16) + (out3<<16) + out4;
+        
+    assign output_up = temp_output_1[63:32];
+    assign output_down = temp_output_1[31:0];
+}
+
+
+// Version 3
+operation approximate_mult_32_x_32_v3{ out AR output_up, out AR output_down, in AR A, in AR B } {}
+{
+    wire [63:0] temp_output_1;
+       
+    wire [15:0] A_up = A[31:16];
+    wire [15:0] A_down = A[15:0];
+    
+    wire [15:0] B_up = B[31:16];
+    wire [15:0] B_down = B[15:0];
+    
+    TIEprint("A_up: %d , A_down: %d , B_up: %d , B_down: %d \n", A_up, A_down, B_up, B_down);
+      
+    wire [31:0] out1, out2, out3, out4;
+    
+    exact_multiplication_16_x_16 am_1(A_up, B_up, out1);
+    module_approximate_mult_16_x_16_v3 am_2(A_up, B_down, out2);
+    module_approximate_mult_16_x_16_v3 am_3(A_down, B_up, out3);
+    module_approximate_mult_16_x_16_v3 am_4(A_down, B_down,out4);
+    
+    
+    TIEprint("out1: %d \n",out1);
+    TIEprint("out2: %d \n",out2);
+    TIEprint("out3: %d \n",out3);
+    TIEprint("out8: %d \n******************* \n",out4);
+      
+    assign temp_output_1 = (out1<<32) + (out2<<16) + (out3<<16) + out4;
+        
+    assign output_up = temp_output_1[63:32];
+    assign output_down = temp_output_1[31:0];
+}
+
+
