@@ -89,9 +89,9 @@ int main() {
         print_binary(num1, binary_num1, sizeof(binary_num1));
         print_binary(num2, binary_num2, sizeof(binary_num2));
         print_binary(num3, binary_num3, sizeof(binary_num3));
-		print_binary(num4, binary_num4, sizeof(binary_num4));
-		print_binary_32bit(t1, binary_t1, sizeof(binary_t1));
-		print_binary_32bit(t2, binary_t2, sizeof(binary_t2));
+	print_binary(num4, binary_num4, sizeof(binary_num4));
+	print_binary_32bit(t1, binary_t1, sizeof(binary_t1));
+	print_binary_32bit(t2, binary_t2, sizeof(binary_t2));
 
         /////////////////////////////////////////////////////////////////////////////////////
 
@@ -105,15 +105,15 @@ int main() {
 
         /////////////////////////////////////////////////////////////////////////////////////
 
-		fprintf(outputFile, "num3: %d \n", num3);
-		fprintf(outputFile, "num4: %d \n", num4);
-		fprintf(outputFile, "t2: %d \n\n", t2);
+	fprintf(outputFile, "num3: %d \n", num3);
+	fprintf(outputFile, "num4: %d \n", num4);
+	fprintf(outputFile, "t2: %d \n\n", t2);
 
         fprintf(outputFile, "output_C_2 (exact): %d\n", output_C_2);
         fprintf(outputFile, "output_8x8_instance_out2: %d\n\n", result.out2);
-		fprintf(outputFile, "difference C_2 - 8x8_instance_out2 = %d, error percentage = %.2f%%\n\n", diff_B, error_percentage_B);
+	fprintf(outputFile, "difference C_2 - 8x8_instance_out2 = %d, error percentage = %.2f%%\n\n", diff_B, error_percentage_B);
 
-		fprintf(outputFile, "******************************************************************************************************\n\n");
+	fprintf(outputFile, "******************************************************************************************************\n\n");
 
     }
     // Calculate average time taken per call
@@ -129,8 +129,7 @@ int main() {
     printf("Average time taken per call for TIE_multiplication: %.2f µs\n\n", avg_time_TIE_multiplication); // Print in microseconds
     printf("Percentage improvement of avg_time_TIE_multiplication over avg_time_C_multiplication: %.2f%%\n\n", percentage_improvement);
 
-
-
+	
     fclose(outputFile);
     printf("Results written to multiplication_results.txt\n");
     return 0;
